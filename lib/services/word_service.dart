@@ -54,6 +54,7 @@ class WordService {
   // Son önerileri hafızaya al
   static Future<void> saveLastSuggestions(List<WordData> words) async {
     final prefs = await SharedPreferences.getInstance();
+
     List<String> wordNames = words.map((w) => w.word).toList();
     await prefs.setStringList(_lastSuggestionsKey, wordNames);
   }
@@ -61,9 +62,23 @@ class WordService {
   static Future<List<WordData>> getLastSuggestions() async {
     final prefs = await SharedPreferences.getInstance();
     List<String> savedNames = prefs.getStringList(_lastSuggestionsKey) ?? [];
+
     if (savedNames.isEmpty) return [];
     if (_cachedWords.isEmpty) await loadWords();
-    return _cachedWords.where((w) => savedNames.contains(w.word)).toList();
+
+    // Her kelimeden sadece BİR TANE al (ilk eşleşeni)
+    List<WordData> result = [];
+    for (String name in savedNames) {
+      final word = _cachedWords.firstWhere(
+        (w) => w.word == name,
+        orElse: () => WordData(word: '', level: '', meanings: []),
+      );
+      if (word.word.isNotEmpty) {
+        result.add(word);
+      }
+    }
+
+    return result;
   }
 
   // Son bakılan kelimeler (Ana Menü için)

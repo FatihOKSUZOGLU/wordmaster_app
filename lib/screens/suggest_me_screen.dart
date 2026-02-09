@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/word_model.dart';
 import '../services/word_service.dart';
-import 'dictionary_screen.dart';
+import 'word_detail_screen.dart';
 
 class SuggestMeScreen extends StatefulWidget {
   @override
@@ -9,7 +9,7 @@ class SuggestMeScreen extends StatefulWidget {
 }
 
 class _SuggestMeScreenState extends State<SuggestMeScreen> {
-  List<WordData> _suggestedWords = [];
+  List<WordData> _suggestedWords = []; // Başlangıçta boş
   bool _isLoading = true;
   String _userLevel = 'A1';
   int _userGoal = 10;
@@ -23,40 +23,47 @@ class _SuggestMeScreenState extends State<SuggestMeScreen> {
   Future<void> _initData() async {
     setState(() => _isLoading = true);
 
-    // 1. Ana ayarlardan seviye ve hedefi oku
+    // Kullanıcı ayarlarını (Level ve Hedef) yükle
     _userLevel = await WordService.getUserLevel();
     _userGoal = await WordService.getDailyGoal();
 
-    // 2. Hafızada bu ayarlara uygun eski öneri var mı?
+    // SADECE daha önce kaydedilmiş (hafızadaki) önerileri getir
     final saved = await WordService.getLastSuggestions();
 
-    // Eğer hafızadaki kelimelerin seviyesi şu anki seviyeyle aynıysa onları göster
-    if (saved.isNotEmpty && saved.first.level == _userLevel) {
-      setState(() {
-        _suggestedWords = saved;
-        _isLoading = false;
-      });
-    } else {
-      _loadNewSuggestions();
-    }
+    setState(() {
+      // Eğer hafızada kelime varsa onları gösterir, yoksa liste boş kalır
+      _suggestedWords = saved;
+      _isLoading = false;
+    });
   }
 
   Future<void> _loadNewSuggestions() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _suggestedWords = []; // YENİ LİSTE ÖNCESİ EKRANI SIFIRLA
+    });
 
     final allWords = await WordService.loadWords();
-    // Sadece kullanıcının ana ayarlarındaki seviyeye göre filtrele
     final levelWords = allWords.where((w) => w.level == _userLevel).toList();
+
+    if (levelWords.isEmpty) {
+      levelWords.addAll(allWords);
+    }
+
     levelWords.shuffle();
 
+    // Sadece hedef kadar kelime al (Örn: 10)
     final newList = levelWords.take(_userGoal).toList();
 
+    // Hafızaya kaydet (Üzerine yazar)
     await WordService.saveLastSuggestions(newList);
 
-    setState(() {
-      _suggestedWords = newList;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _suggestedWords = newList;
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -72,7 +79,7 @@ class _SuggestMeScreenState extends State<SuggestMeScreen> {
       ),
       body: Column(
         children: [
-          // Bilgi Paneli (Değiştirilemez, sadece bilgi verir)
+          // Üst Bilgi ve Yenileme Paneli
           Container(
             padding: const EdgeInsets.all(16),
             margin: const EdgeInsets.all(16),
@@ -89,58 +96,105 @@ class _SuggestMeScreenState extends State<SuggestMeScreen> {
                     Text('Level: $_userLevel',
                         style: const TextStyle(
                             color: Colors.blue, fontWeight: FontWeight.bold)),
-                    Text('Goal: $_userGoal Words',
+                    Text('Daily Goal: $_userGoal Words',
                         style: const TextStyle(
-                            color: Colors.orange, fontSize: 12)),
+                            color: Colors.white54, fontSize: 12)),
                   ],
                 ),
                 ElevatedButton.icon(
                   onPressed: _loadNewSuggestions,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text("New List"),
+                  icon: const Icon(Icons.auto_awesome,
+                      size: 18, color: Colors.white),
+                  label: const Text("New List",
+                      style: TextStyle(color: Colors.white)),
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.withOpacity(0.2)),
+                      backgroundColor: Colors.blue.withOpacity(0.5),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10))),
                 ),
               ],
             ),
           ),
 
+          // Liste Alanı
           Expanded(
             child: _isLoading
                 ? const Center(
                     child: CircularProgressIndicator(color: Colors.blue))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _suggestedWords.length,
-                    itemBuilder: (context, index) {
-                      final word = _suggestedWords[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: ListTile(
-                          title: Text(word.word,
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 18)),
-                          trailing: const Icon(Icons.arrow_forward_ios,
-                              color: Colors.white24, size: 14),
-                          onTap: () {
-                            WordService.addRecentWord(word.word);
-                            Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => DictionaryScreen(
-                                        initialWord: word.word)));
-                          },
-                        ),
-                      );
-                    },
-                  ),
+                : _suggestedWords.isEmpty
+                    ? _buildEmptyState() // Eğer sorgu yoksa burası çalışır
+                    : _buildWordList(), // Sorgu varsa liste çalışır
           ),
         ],
       ),
+    );
+  }
+
+  // Sorgu atılmamışsa gösterilecek ekran
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.search_off_rounded,
+              size: 80, color: Colors.white.withOpacity(0.1)),
+          const SizedBox(height: 20),
+          Text(
+            'No active suggestions',
+            style: TextStyle(
+                color: Colors.white.withOpacity(0.4),
+                fontSize: 18,
+                fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              'Tap the "New List" button above to generate your daily word suggestions.',
+              textAlign: TextAlign.center,
+              style:
+                  TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Kelime listesi
+  Widget _buildWordList() {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _suggestedWords.length,
+      itemBuilder: (context, index) {
+        final word = _suggestedWords[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: ListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            title: Text(word.word,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500)),
+            trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => WordDetailScreen(word: word),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

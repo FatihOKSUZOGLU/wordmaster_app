@@ -9,118 +9,139 @@ class WordDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF0A0E27),
+      backgroundColor: const Color(0xFF0A0E27),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        // Geri okunu tam beyaz yapar
-        iconTheme: IconThemeData(color: Colors.white),
-        title: Text(word.word,
-            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(word.word, style: const TextStyle(color: Colors.white)),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    word.word,
-                    style: const TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    word.level,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Divider(thickness: 2),
-            const SizedBox(height: 20),
-            ...word.meanings.map((meaning) => _buildMeaningSection(meaning)),
+            // Başlık Kartı
+            _buildHeader(),
+            const SizedBox(height: 30),
+            const Text('Meanings',
+                style: TextStyle(
+                    color: Colors.blue,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 15),
+
+            // Anlamlar Listesi
+            ...word.meanings
+                .map((meaning) => _buildMeaningCard(meaning))
+                .toList(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMeaningSection(Meaning meaning) {
+  Widget _buildHeader() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(colors: [
+          Colors.blue.withOpacity(0.2),
+          Colors.purple.withOpacity(0.2)
+        ]),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            meaning.partOfSpeech.toUpperCase(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade600,
-              letterSpacing: 1,
-            ),
+          Text(word.word,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(20)),
+            child: Text(word.level,
+                style: const TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.bold)),
           ),
-          const SizedBox(height: 12),
-          ...meaning.definitions.map((def) => _buildDefinition(def)),
         ],
       ),
     );
   }
 
-  Widget _buildDefinition(Definition definition) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+  Widget _buildMeaningCard(Meaning meaning) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('• ', style: TextStyle(fontSize: 18)),
-              Expanded(
-                child: Text(
-                  definition.definition,
-                  style: const TextStyle(fontSize: 16, height: 1.5),
-                ),
-              ),
-            ],
-          ),
-          if (definition.example != null && definition.example!.isNotEmpty)
+          // İsim/Fiil Etiketi
+          if (meaning.partOfSpeech != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8)),
+              child: Text(meaning.partOfSpeech!.toUpperCase(),
+                  style: const TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold)),
+            ),
+          const SizedBox(height: 12),
+
+          // Definitions Listesi (İç içe döngü)
+          ...meaning.definitions
+              .map((def) => _buildDefinitionItem(def))
+              .toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDefinitionItem(Definition def) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("• ${def.definition}",
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 16, height: 1.4)),
+          if (def.example != null && def.example!.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 8, left: 10),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10)),
+              child: Text("\"${def.example}\"",
+                  style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic)),
+            ),
+          if (def.synonyms != null && def.synonyms!.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(left: 16, top: 6),
-              child: Text(
-                '"${definition.example}"',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey.shade700,
-                ),
+              padding: const EdgeInsets.only(top: 8, left: 10),
+              child: Wrap(
+                spacing: 6,
+                children: def.synonyms!
+                    .map((s) => Text("#$s",
+                        style: const TextStyle(
+                            color: Colors.purpleAccent, fontSize: 12)))
+                    .toList(),
               ),
             ),
         ],
