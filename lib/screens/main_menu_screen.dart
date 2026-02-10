@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:wordmaster_app/models/word_model.dart';
+import 'package:wordmaster_app/screens/KnownWordScreen.dart';
+import 'package:wordmaster_app/screens/word_detail_screen.dart';
 import '../services/word_service.dart';
 import 'onboarding_screen.dart';
 import 'dictionary_screen.dart';
@@ -13,11 +16,37 @@ class MainMenuScreen extends StatefulWidget {
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
   List<String> _recentWords = [];
+  List<WordData> _knownWordsList = [];
+  bool _isLoadingKnown = true;
 
   @override
   void initState() {
     super.initState();
     _loadRecent();
+    _loadKnownWords();
+  }
+
+  Future<void> _loadKnownWords() async {
+    setState(() => _isLoadingKnown = true);
+
+    final knownNames = await WordService.getKnownWords();
+    if (knownNames.isEmpty) {
+      setState(() {
+        _knownWordsList = [];
+        _isLoadingKnown = false;
+      });
+      return;
+    }
+
+    final allWords = await WordService.loadWords();
+    // Sadece bilinen kelimeleri filtrele
+    final filtered =
+        allWords.where((w) => knownNames.contains(w.word)).toList();
+
+    setState(() {
+      _knownWordsList = filtered;
+      _isLoadingKnown = false;
+    });
   }
 
   Future<void> _loadRecent() async {
@@ -82,6 +111,17 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 Colors.orange,
                 () => Navigator.push(context,
                     MaterialPageRoute(builder: (_) => SuggestMeScreen()))),
+            const SizedBox(height: 15),
+            _buildMenuCard(
+                context,
+                'Known Words',
+                'Review your learned words',
+                Icons.fact_check,
+                Colors.greenAccent,
+                () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const KnownWordsScreen()))),
 
             const SizedBox(height: 30),
             const Text('Recently Viewed',
@@ -95,6 +135,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                           style: TextStyle(color: Colors.white24)))
                   : ListView.builder(
                       itemCount: _recentWords.length,
+                      shrinkWrap: true,
+                      physics: NeverScrollableScrollPhysics(),
                       itemBuilder: (context, index) => ListTile(
                         title: Text(_recentWords[index],
                             style: const TextStyle(color: Colors.white)),

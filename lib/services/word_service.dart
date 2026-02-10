@@ -9,6 +9,7 @@ class WordService {
   // Hafıza Anahtarları
   static const String _recentWordsKey = 'recent_words';
   static const String _lastSuggestionsKey = 'last_suggestions';
+  static const String _knownWordsKey = 'known_words';
   static const String _userLevelKey = 'user_level';
   static const String _dailyGoalKey = 'daily_goal';
   static const String _frequencyKey = 'frequency';
@@ -27,6 +28,26 @@ class WordService {
     }
   }
 
+  static Future<void> addKnownWords(List<String> words) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> knownWords = prefs.getStringList(_knownWordsKey) ?? [];
+
+    for (var word in words) {
+      if (!knownWords.contains(word)) {
+        knownWords.add(word);
+      }
+    }
+
+    await prefs.setStringList(_knownWordsKey, knownWords);
+  }
+
+  static Future<void> removeKnownWord(String word) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> knownWords = prefs.getStringList(_knownWordsKey) ?? [];
+    knownWords.remove(word);
+    await prefs.setStringList(_knownWordsKey, knownWords);
+  }
+
   // Kullanıcı ayarlarını kaydet
   static Future<void> saveUserSettings({
     required String level,
@@ -38,6 +59,18 @@ class WordService {
     await prefs.setInt(_dailyGoalKey, dailyGoal);
     await prefs.setString(_frequencyKey, frequency);
     await prefs.setBool('is_first_run', false); // Kurulum tamamlandı işareti
+  }
+
+  // Bilinen kelimeleri getir
+  static Future<List<String>> getKnownWords() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_knownWordsKey) ?? [];
+  }
+
+  // Bir kelimenin bilinip bilinmediğini kontrol et
+  static Future<bool> isWordKnown(String word) async {
+    final knownWords = await getKnownWords();
+    return knownWords.contains(word);
   }
 
   // Ayarları oku

@@ -9,7 +9,8 @@ class SuggestMeScreen extends StatefulWidget {
 }
 
 class _SuggestMeScreenState extends State<SuggestMeScreen> {
-  List<WordData> _suggestedWords = []; // Başlangıçta boş
+  List<WordData> _suggestedWords = [];
+  Set<String> _markedAsKnown = {}; // Yeşil işaretlenenler (geçici)
   bool _isLoading = true;
   String _userLevel = 'A1';
   int _userGoal = 10;
@@ -23,39 +24,55 @@ class _SuggestMeScreenState extends State<SuggestMeScreen> {
   Future<void> _initData() async {
     setState(() => _isLoading = true);
 
-    // Kullanıcı ayarlarını (Level ve Hedef) yükle
     _userLevel = await WordService.getUserLevel();
     _userGoal = await WordService.getDailyGoal();
 
-    // SADECE daha önce kaydedilmiş (hafızadaki) önerileri getir
     final saved = await WordService.getLastSuggestions();
 
+    // DAHA ÖNCE İŞARETLENMİŞLERİ YÜKLE (Kalıcılık için)
+    final knownWords = await WordService.getKnownWords();
+
     setState(() {
-      // Eğer hafızada kelime varsa onları gösterir, yoksa liste boş kalır
       _suggestedWords = saved;
+      // Eğer kayıtlı kelimeler şu anki listede varsa onları işaretli göster
+      _markedAsKnown = _suggestedWords
+          .map((w) => w.word)
+          .where((name) => knownWords.contains(name))
+          .toSet();
       _isLoading = false;
     });
   }
 
   Future<void> _loadNewSuggestions() async {
+    // Önce yeşil işaretlileri kaydet
+    if (_markedAsKnown.isNotEmpty) {
+      await WordService.addKnownWords(_markedAsKnown.toList());
+    }
+
     setState(() {
       _isLoading = true;
-      _suggestedWords = []; // YENİ LİSTE ÖNCESİ EKRANI SIFIRLA
+      _suggestedWords = [];
+      _markedAsKnown.clear(); // Yeni liste için sıfırla
     });
 
     final allWords = await WordService.loadWords();
-    final levelWords = allWords.where((w) => w.level == _userLevel).toList();
+    final knownWords = await WordService.getKnownWords();
+
+    // Kullanıcının seviyesine göre filtrele VE bilinen kelimeleri çıkar
+    final levelWords = allWords
+        .where((w) => w.level == _userLevel && !knownWords.contains(w.word))
+        .toList();
 
     if (levelWords.isEmpty) {
-      levelWords.addAll(allWords);
+      // Eğer o seviyede kelime kalmadıysa, tüm bilinmeyen kelimelerden al
+      levelWords.addAll(
+        allWords.where((w) => !knownWords.contains(w.word)).toList(),
+      );
     }
 
     levelWords.shuffle();
-
-    // Sadece hedef kadar kelime al (Örn: 10)
     final newList = levelWords.take(_userGoal).toList();
 
-    // Hafızaya kaydet (Üzerine yazar)
     await WordService.saveLastSuggestions(newList);
 
     if (mounted) {
@@ -63,6 +80,25 @@ class _SuggestMeScreenState extends State<SuggestMeScreen> {
         _suggestedWords = newList;
         _isLoading = false;
       });
+    }
+  }
+
+  void _toggleKnown(String wordName) async {
+    setState(() {
+      if (_markedAsKnown.contains(wordName)) {
+        _markedAsKnown.remove(wordName);
+      } else {
+        _markedAsKnown.add(wordName);
+      }
+    });
+
+    // ANLIK KAYIT: Kullanıcı sayfadan çıksa bile veri kaybolmaz
+    if (_markedAsKnown.contains(wordName)) {
+      await WordService.addKnownWords([wordName]);
+    } else {
+      // Eğer işareti kaldırdıysa hafızadan da silmek isterseniz
+      _markedAsKnown.remove(wordName);
+      await WordService.removeKnownWord(wordName);
     }
   }
 
@@ -79,7 +115,7 @@ class _SuggestMeScreenState extends State<SuggestMeScreen> {
       ),
       body: Column(
         children: [
-          // Üst Bilgi ve Yenileme Paneli
+          // Üst Panel
           Container(
             padding: const EdgeInsets.all(16),
             margin: const EdgeInsets.all(16),
@@ -99,6 +135,9 @@ class _SuggestMeScreenState extends State<SuggestMeScreen> {
                     Text('Daily Goal: $_userGoal Words',
                         style: const TextStyle(
                             color: Colors.white54, fontSize: 12)),
+                    Text('Marked: ${_markedAsKnown.length}',
+                        style: const TextStyle(
+                            color: Colors.greenAccent, fontSize: 11)),
                   ],
                 ),
                 ElevatedButton.icon(
@@ -116,21 +155,20 @@ class _SuggestMeScreenState extends State<SuggestMeScreen> {
             ),
           ),
 
-          // Liste Alanı
+          // Liste
           Expanded(
             child: _isLoading
                 ? const Center(
                     child: CircularProgressIndicator(color: Colors.blue))
                 : _suggestedWords.isEmpty
-                    ? _buildEmptyState() // Eğer sorgu yoksa burası çalışır
-                    : _buildWordList(), // Sorgu varsa liste çalışır
+                    ? _buildEmptyState()
+                    : _buildWordList(),
           ),
         ],
       ),
     );
   }
 
-  // Sorgu atılmamışsa gösterilecek ekran
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -139,18 +177,16 @@ class _SuggestMeScreenState extends State<SuggestMeScreen> {
           Icon(Icons.search_off_rounded,
               size: 80, color: Colors.white.withOpacity(0.1)),
           const SizedBox(height: 20),
-          Text(
-            'No active suggestions',
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.4),
-                fontSize: 18,
-                fontWeight: FontWeight.w500),
-          ),
+          Text('No active suggestions',
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500)),
           const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: Text(
-              'Tap the "New List" button above to generate your daily word suggestions.',
+              'Tap "New List" to generate your daily word suggestions.',
               textAlign: TextAlign.center,
               style:
                   TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 14),
@@ -161,37 +197,61 @@ class _SuggestMeScreenState extends State<SuggestMeScreen> {
     );
   }
 
-  // Kelime listesi
   Widget _buildWordList() {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: _suggestedWords.length,
       itemBuilder: (context, index) {
         final word = _suggestedWords[index];
+        final isKnown = _markedAsKnown.contains(word.word);
+
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: isKnown
+                ? Colors.green.withOpacity(0.15)
+                : Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
+            border: Border.all(
+              color: isKnown
+                  ? Colors.greenAccent.withOpacity(0.5)
+                  : Colors.white.withOpacity(0.05),
+              width: isKnown ? 2 : 1,
+            ),
           ),
           child: ListTile(
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
             title: Text(word.word,
-                style: const TextStyle(
-                    color: Colors.white,
+                style: TextStyle(
+                    color: isKnown ? Colors.greenAccent : Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w500)),
-            trailing: const Icon(Icons.chevron_right, color: Colors.white24),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => WordDetailScreen(word: word),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Yeşil İşaret Butonu
+                IconButton(
+                  icon: Icon(
+                    isKnown ? Icons.check_circle : Icons.check_circle_outline,
+                    color: isKnown ? Colors.greenAccent : Colors.white38,
+                  ),
+                  onPressed: () => _toggleKnown(word.word),
                 ),
-              );
-            },
+                // Detay Oku
+                IconButton(
+                  icon: const Icon(Icons.chevron_right, color: Colors.white24),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => WordDetailScreen(word: word),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },
